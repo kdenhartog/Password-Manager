@@ -70,7 +70,7 @@ public class PasswordManager
                     new BufferedReader(
                         new InputStreamReader(System.in));
                 byte[] secret = br.readLine().getBytes("utf-8");
-                MessageDigest gut = MessageDigest.getInstance("sha-256");
+                MessageDigest gut = MessageDigest.getInstance("sha-512");
                 gut.reset();
                 gut.update(salt);
                 gut.update(secret);
@@ -137,7 +137,7 @@ public class PasswordManager
         }
     }
         
-    public static void main(String[] args) throws Exception 
+    /*public static void main(String[] args) throws Exception 
     {
         try
         {
@@ -153,5 +153,5 @@ public class PasswordManager
         
         System.in.read();
         System.exit(0);
-    }
+    }*/
 }
