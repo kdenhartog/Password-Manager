@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package passwordmanager;
 
 import java.io.File;
@@ -64,21 +59,7 @@ public class PassManager {
     }
 
     private static void setup() throws NoSuchAlgorithmException, NoSuchProviderException, FileNotFoundException, IOException {
-        Scanner sc = new Scanner(System.in);
-        String master_passwd;
-        System.out.println("Please provide a master password: ");
-        while (!sc.hasNext()) {
-            System.out.println("Please provide a master password: ");
-        }
-        master_passwd = sc.next();
-
-        byte[] password = master_passwd.getBytes();
-        byte[] salt = SecurityFunction.saltGenerator();
-        byte[] salted_password = new byte[salt.length + password.length];
-        salted_password = Arrays.concatenate(salt, password);
-        byte[] hashed = SecurityFunction.hash(salted_password);
-        byte[] salt_and_hash = Arrays.concatenate(salt, hashed);
-
+        
         //create passwd_file path
         String passwd_file_path = System.getProperty("user.dir");
         passwd_file_path += "/passwd_file";
@@ -86,11 +67,10 @@ public class PassManager {
         //Used for master_passwd path
         String master_passwd_path = System.getProperty("user.dir");
         master_passwd_path += "/master_passwd";
-       
-
+                         
         File passwd_file = new File(passwd_file_path);
         File master_passwd_file = new File(master_passwd_path);
-
+        
         try {
             passwd_file.createNewFile();
             master_passwd_file.createNewFile();
@@ -98,31 +78,50 @@ public class PassManager {
             System.out.println(e);
         }
         
+        Scanner sc = new Scanner(System.in);
+        
+        String master_passwd;
+        
+        System.out.print("\nPlease provide a master password: ");
+        while (!sc.hasNext()) {
+            System.out.print("\nNo password enetered. Please provide a master password: ");
+        }        
+        master_passwd = sc.next();
+
+        byte[] password = master_passwd.getBytes();
+        
+        byte[] salt = SecurityFunction.saltGenerator();
+        byte[] salted_password = Arrays.concatenate(salt, password);
+        
+        byte[] hash = SecurityFunction.hash(salted_password);
+        byte[] salt_and_hash = Arrays.concatenate(salt, hash);
+        
         try (FileOutputStream output = new FileOutputStream("master_passwd")) {
             output.write(salt_and_hash);
-            output.close();
         }
+
     }
 
     private static boolean password_check(String entry) throws FileNotFoundException, IOException, NoSuchAlgorithmException, NoSuchProviderException {
-
+ 
         byte[] password = entry.getBytes();
-
-
-        FileInputStream input = new FileInputStream("master_passwd");
-        byte[] contents = new byte[768];
-
-        for (int i = 0; i < 768; i++) {
-            contents[i] = (byte) input.read();
+        
+        byte[] contents = new byte[320];
+        
+        try (FileInputStream input = new FileInputStream("master_passwd")) {
+            //read in all 320 bytes from the master_passwd file
+            for (int i = 0; i < 320; i++) {
+                contents[i] = (byte) input.read();
+            }
         }
+        
+        byte[] salt = Arrays.copyOf(contents, 256);
 
-        byte[] salt = new byte[256];
-        System.arraycopy(contents, 0, salt, 0, 256);
-
+        //concatenate the salt and the password then hash it
         byte[] salted_password = Arrays.concatenate(salt, password);
-        byte[] hashed = SecurityFunction.hash(salted_password);
-
-        return (Arrays.concatenate(salt, hashed).equals(contents));
+        byte[] hashed = SecurityFunction.hash(salted_password);     
+        
+        return (Arrays.areEqual(contents, Arrays.concatenate(salt, hashed)));
 
     }
 
@@ -159,7 +158,7 @@ public class PassManager {
             
             //verifies password are correct or exits after 5 attempts
             int counter = 0;
-            while (!password_check(master_passwd) && counter < 5) {
+            while (!password_check(master_passwd)) {
                 System.out.println("WRONG MASTER PASSWORD\n");
                 System.out.print("Please re-enter your master password: ");
                 master_passwd = sc.next();
