@@ -5,9 +5,16 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.util.Scanner;
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import org.bouncycastle.util.Arrays;
 
 /**
@@ -21,7 +28,7 @@ public class PassManager {
         //TODO: need plan of attack
     }
 
-    private static void registerAccount() {
+    private static void registerAccount() throws NoSuchAlgorithmException, NoSuchPaddingException, NoSuchProviderException, FileNotFoundException, IOException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         Scanner sc = new Scanner(System.in);
         //Get Domain Name
         while(!sc.hasNext()){
@@ -41,12 +48,32 @@ public class PassManager {
         }
         String password = sc.next();
 
+        String passwd_file_path = System.getProperty("user.dir");
+        passwd_file_path += "/passwd_file";
+        
+        Path path = Paths.get(passwd_file_path);
+        byte[] accountInfo = Files.readAllBytes(path);
+        
+        byte[] decrypted = SecurityFunction.decrypt(accountInfo);
+        
+        //TODO: parse decrypted info to see if account exists
         //TODO: if account already exists print USER ACCOUNT ALREADY EXISTS!\n
-        //TODO: else add new account and re-encrypt entire passwd_file with new IV and master_pass as key
+        
+        //else       
+        String data = domain + " " + username + " " + password + "!";
+        byte[] dataBytes = data.getBytes();
+        
+        byte[] newData = Arrays.concatenate(decrypted, dataBytes);
+        byte[] encrypted = SecurityFunction.encrypt(newData);
+        
+        try (FileOutputStream output = new FileOutputStream("passwd_file")) {
+            output.write(encrypted);
+            output.close();
+        }
 
     }
 
-    private static void deleteAccount() {
+    private static void deleteAccount() throws IOException, NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         Scanner sc = new Scanner(System.in);
 
         //Get Domain Name
@@ -67,11 +94,30 @@ public class PassManager {
         }
         String password = sc.next();
 
+        String passwd_file_path = System.getProperty("user.dir");
+        passwd_file_path += "/passwd_file";
+        
+        Path path = Paths.get(passwd_file_path);
+        byte[] accountInfo = Files.readAllBytes(path);
+        
+        byte[] decrypted = SecurityFunction.decrypt(accountInfo);
+  
         //TODO: if account doesn't exists print USER ACCOUNT DOES NOT EXISTS!\n
-        //TODO: else find account, remove account, and re-encrypt entire passwd_file with new IV and master_pass as key
+        //TODO: else find account and remove
+        
+        //newData will be data with account removed
+        byte[] newData = null;
+        
+        byte[] encrypted = SecurityFunction.encrypt(newData);
+        
+        try (FileOutputStream output = new FileOutputStream("passwd_file")) {
+            output.write(encrypted);
+            output.close();
+        }
+        
     }
 
-    private static void changeAccount() {
+    private static void changeAccount() throws IOException, NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         Scanner sc = new Scanner(System.in);
 
         //Get Domain Name
@@ -98,10 +144,26 @@ public class PassManager {
         }
         String newpass = sc.next();
 
-
+        String passwd_file_path = System.getProperty("user.dir");
+        passwd_file_path += "/passwd_file";
+        
+        Path path = Paths.get(passwd_file_path);
+        byte[] accountInfo = Files.readAllBytes(path);
+        
+        byte[] decrypted = SecurityFunction.decrypt(accountInfo);
 
         //TODO: if account doesn't exists print USER ACCOUNT DOES NOT EXISTS!\n
-        //TODO: else find account, update password, and re-encrypt entire passwd_file with new IV and master_pass as key
+        //TODO: else find account, update password
+        
+        //newData will be data with account info updated
+        byte[] newData = null;
+        
+        byte[] encrypted = SecurityFunction.encrypt(newData);
+        
+        try (FileOutputStream output = new FileOutputStream("passwd_file")) {
+            output.write(encrypted);
+            output.close();
+        }
     }
 
     private static void getPassword() {
@@ -150,7 +212,7 @@ public class PassManager {
 
         byte[] password = master_passwd.getBytes();
 
-        byte[] salt = SecurityFunction.saltGenerator();
+        byte[] salt = SecurityFunction.randomNumberGenerator();
         byte[] salted_password = Arrays.concatenate(salt, password);
 
         byte[] hash = SecurityFunction.hash(salted_password);
@@ -186,19 +248,10 @@ public class PassManager {
 
     }
 
-    //This will be useful when needing to re-encrypt passwd_file
-    private static String getMasterPass(){
-        //TODO: Get master_passwd file,
-        //TODO: pull the master_password from file
-        //TODO: Convert from byte[] to String
-        //TODO: return the String
-        return "";
-    }
-
     //This will be useful for making changes to acount/password lookup
-    private static String accountLookup(String domain, String user, String pass){
+    private static Boolean accountLookup(String domain, String user, String pass){
         //TODO: return if account is in passwd_file given domain, user, and pass
-        return "";
+        return false;
     }
 
     private static boolean fileCheck() {
@@ -217,7 +270,9 @@ public class PassManager {
     }
 
     private static void startup() throws 
-            IOException, NoSuchAlgorithmException, FileNotFoundException, 
+            IOException,
+            NoSuchAlgorithmException, 
+            FileNotFoundException, 
             NoSuchProviderException {
         String master_passwd;
         Scanner sc = new Scanner(System.in);
@@ -268,8 +323,27 @@ public class PassManager {
         return option;
     }
 
+    /**
+     *
+     * @param args
+     * @throws NoSuchAlgorithmException
+     * @throws NoSuchProviderException
+     * @throws IOException
+     * @throws NoSuchPaddingException
+     * @throws java.io.FileNotFoundException
+     * @throws java.security.InvalidKeyException
+     * @throws javax.crypto.IllegalBlockSizeException
+     * @throws javax.crypto.BadPaddingException
+     */
     public static void main(String[] args) throws
-    NoSuchAlgorithmException, NoSuchProviderException, IOException {
+        NoSuchAlgorithmException,
+        NoSuchProviderException,
+        IOException,
+        NoSuchPaddingException,
+        FileNotFoundException,
+        InvalidKeyException,
+        IllegalBlockSizeException,
+        BadPaddingException {
         int option_select;
 
         startup();
