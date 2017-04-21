@@ -1,6 +1,7 @@
 This is a programming project that was designed for a computer security class at the University of Iowa. Design constraints can be found in the document titled "CS4640_PP1.pdf".
 
 ## Compile
+To compile:
 ./compile.sh
 
 To run:
