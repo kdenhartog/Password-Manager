@@ -1,5 +1,10 @@
-To compile and run the files type:
+To compile:
+./compile.sh
+
+To run:
 ./run.sh
 
-Note: it has been given execution permissions already, but if you have issues with the above command you should try:
+Note: both of these scripts have been given executable permissions, but if you have issues with the above command you should try:
 chmod +x run.sh
+or
+chmod +x compile.sh
