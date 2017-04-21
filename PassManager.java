@@ -1,5 +1,3 @@
-package passwordmanager;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -13,6 +11,7 @@ import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.InvalidParameterSpecException;
 import java.util.Scanner;
 import javax.crypto.BadPaddingException;
@@ -21,27 +20,48 @@ import javax.crypto.NoSuchPaddingException;
 import org.bouncycastle.util.Arrays;
 
 /**
- *
- * @author Kyle Den Hartog, Nicholas Kao, and Doug Ives
- */
+*
+* @author Kyle Den Hartog, Nicholas Kao, and Doug Ives
+*/
 public class PassManager {
 
-    private static void checkIntegrity() {
-        System.out.println("Checking Integrity...\n");
-        //TODO: need plan of attack
+    private static void checkIntegrity() throws
+    IOException,
+    FileNotFoundException,
+    NoSuchProviderException,
+    NoSuchAlgorithmException,
+    InvalidKeyException,
+    InvalidKeySpecException {
+        //Get data from passwd_file
+        String passwd_file_path = System.getProperty("user.dir");
+        passwd_file_path += "/passwd_file";
+        Path path = Paths.get(passwd_file_path);
+        byte[] data = Files.readAllBytes(path);
+
+        byte[] lastHmac = Arrays.copyOf(data, 64);
+        byte[] encrypted = Arrays.copyOfRange(data, 64, data.length);
+        byte[] currentHmac = SecurityFunction.hmac(encrypted);
+
+
+        if (Arrays.areEqual(lastHmac, currentHmac)) {
+            System.out.print("PASSED!\n");
+        } else {
+            System.out.println("FAILED!\n");
+        }
     }
 
     private static void registerAccount() throws
-            NoSuchAlgorithmException,
-            NoSuchPaddingException,
-            NoSuchProviderException,
-            FileNotFoundException,
-            IOException,
-            InvalidKeyException,
-            IllegalBlockSizeException,
-            BadPaddingException,
-            InvalidParameterSpecException,
-            InvalidAlgorithmParameterException {
+    NoSuchAlgorithmException,
+    NoSuchPaddingException,
+    NoSuchProviderException,
+    FileNotFoundException,
+    IOException,
+    InvalidKeyException,
+    IllegalBlockSizeException,
+    BadPaddingException,
+    InvalidParameterSpecException,
+    InvalidAlgorithmParameterException,
+    InvalidKeySpecException {
         Scanner sc = new Scanner(System.in);
         //Get Domain Name
         System.out.print("\nPlease enter the domain name: ");
@@ -55,53 +75,55 @@ public class PassManager {
         System.out.print("Please enter your password: ");
         String password = sc.next();
 
+        //get data from passwd_file
         String passwd_file_path = System.getProperty("user.dir");
         passwd_file_path += "/passwd_file";
-
         Path path = Paths.get(passwd_file_path);
         byte[] data = Files.readAllBytes(path);
-        byte[] encrypted;
-        if (data.length > 0) {
-            byte[] decrypted = SecurityFunction.decrypt(data);
-            String account = domain + " " + username + " " + password + "!";
 
-            if (accountLookup(domain, username, decrypted) == null) {
-                byte[] dataBytes = account.getBytes("UTF-8");
-                byte[] newData = Arrays.concatenate(decrypted, dataBytes);
-                encrypted = SecurityFunction.encrypt(newData);
-                //write to file       
-                try (FileOutputStream output = new FileOutputStream("passwd_file")) {
-                    output.write(encrypted);
-                    output.close();
-                    System.out.println("USER ACCOUNT REGISTERED!\n");
-                }
-            } else {
-                System.out.println("USER ACCOUNT ALREADY EXISTS!\n");
-            }
-        } else {
+        //strip hmac
+        byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
+        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac);
+
+        //Lookup account to see if it already exists if not write it to file
+        if (accountLookup(domain, username, decrypted) == null) {
+            //create account using " " for acc attribute seperation and "!" used for acc seperation
             String account = domain + " " + username + " " + password + "!";
             byte[] dataBytes = account.getBytes("UTF-8");
-            encrypted = SecurityFunction.encrypt(dataBytes);
+
+            //append account to end of stored accounts data
+            byte[] newData = Arrays.concatenate(decrypted, dataBytes);
+
+            //reencrypt data
+            byte[] encrypted = SecurityFunction.encrypt(newData);
+
+            //generate hmac
+            byte[] hmac = SecurityFunction.hmac(encrypted);
+            byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
+
             //write to file
             try (FileOutputStream output = new FileOutputStream("passwd_file")) {
-                output.write(encrypted);
+                output.write(hmac_and_encrypted);
                 output.close();
                 System.out.println("USER ACCOUNT REGISTERED!\n");
             }
+        } else {
+            System.out.println("USER ACCOUNT ALREADY EXISTS!\n");
         }
     }
 
     private static void deleteAccount() throws
-            IOException,
-            NoSuchAlgorithmException,
-            NoSuchProviderException,
-            NoSuchPaddingException,
-            InvalidKeyException,
-            IllegalBlockSizeException,
-            BadPaddingException,
-            InvalidParameterSpecException,
-            FileNotFoundException,
-            InvalidAlgorithmParameterException {
+    IOException,
+    NoSuchAlgorithmException,
+    NoSuchProviderException,
+    NoSuchPaddingException,
+    InvalidKeyException,
+    IllegalBlockSizeException,
+    BadPaddingException,
+    InvalidParameterSpecException,
+    FileNotFoundException,
+    InvalidAlgorithmParameterException,
+    InvalidKeySpecException {
         Scanner sc = new Scanner(System.in);
         //Get Domain Name
         System.out.print("\nPlease enter the domain name: ");
@@ -112,65 +134,74 @@ public class PassManager {
         //Get password
         System.out.print("Please enter your password: ");
         String password = sc.next();
+
+        //get data from passwd_file
         String passwd_file_path = System.getProperty("user.dir");
         passwd_file_path += "/passwd_file";
-
         Path path = Paths.get(passwd_file_path);
         byte[] data = Files.readAllBytes(path);
-        byte[] encrypted;
-        if (data.length > 0) {
-            byte[] decrypted = SecurityFunction.decrypt(data);
-            if (accountLookup(domain, username, decrypted) != null) {
-                String dataString = new String(decrypted, "UTF-8");
-                String[] accounts = dataString.split("!");
-                String account = domain + " " + username;
-                //search through accounts and delete account
-                for (int i = 0; i < accounts.length; i++) {
-                    if (accounts[i].contains(account)) {
-                        accounts[i] = null;
-                        break;
-                    }
+
+        //strip hmac
+        byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
+        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac);
+
+        //check if account exists
+        if (accountLookup(domain, username, decrypted) != null) {
+            String dataString = new String(decrypted, "UTF-8");
+            String[] accounts = dataString.split("!");
+            String account = domain + " " + username;
+            //search through accounts and delete account
+            for (int i = 0; i < accounts.length; i++) {
+                if (accounts[i].contains(account)) {
+                    accounts[i] = null;
+                    break;
                 }
-                //rebuild list of accounts by filling the removed
-                String newAccList = null;
-                for (int i = 0; i < accounts.length; i++) {
-                    if (accounts[i] != null) {
-                        newAccList += accounts[i] + "!";
-                    }
-                }
-                System.out.println(newAccList);
-                if (newAccList != null) {
-                    byte[] bytesData = newAccList.getBytes("UTF-8");
-                    //encrypt new data
-                    encrypted = SecurityFunction.encrypt(bytesData);
-                    //write to file       
-                    try (FileOutputStream output = new FileOutputStream("passwd_file")) {
-                        output.write(encrypted);
-                        output.close();
-                        System.out.println("USER ACCOUNT REMOVED!\n");
-                    }
-                } else {//all accounts have been removed
-                    System.out.println("ALL ACCOUNTS DELETED!\n");
-                }
-            } else {//account not found
-                System.out.println("USER ACCOUNT DOES NOT EXIST!\n");
             }
-        } else {//no data
+
+            //rebuild list of accounts by filling the removed
+            String newAccList = "";
+            for (int i = 0; i < accounts.length; i++) {
+                if (accounts[i] != null) {
+                    newAccList += accounts[i] + "!";
+                }
+            }
+
+            //turn accounts list back into bytes
+            byte[] bytesData = newAccList.getBytes("UTF-8");
+
+            //encrypt data
+            byte[] encrypted = SecurityFunction.encrypt(bytesData);
+
+            //generate hmac and append data
+            byte[] hmac = SecurityFunction.hmac(encrypted);
+            byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
+
+            //write to file
+            try (FileOutputStream output = new FileOutputStream("passwd_file")) {
+                output.write(hmac_and_encrypted);
+                output.close();
+                System.out.println("USER ACCOUNT REMOVED!\n");
+            }
+        } else {//account not found
             System.out.println("USER ACCOUNT DOES NOT EXIST!\n");
         }
     }
 
+    /*  This is a function to change an accounts password given a domain name,
+    *   a username, the old password, and the new password.
+    */
     private static void changeAccount() throws
-            IOException,
-            NoSuchAlgorithmException,
-            NoSuchProviderException,
-            NoSuchPaddingException,
-            InvalidKeyException,
-            IllegalBlockSizeException,
-            BadPaddingException,
-            InvalidParameterSpecException,
-            FileNotFoundException,
-            InvalidAlgorithmParameterException {
+    IOException,
+    NoSuchAlgorithmException,
+    NoSuchProviderException,
+    NoSuchPaddingException,
+    InvalidKeyException,
+    IllegalBlockSizeException,
+    BadPaddingException,
+    InvalidParameterSpecException,
+    FileNotFoundException,
+    InvalidAlgorithmParameterException,
+    InvalidKeySpecException {
         Scanner sc = new Scanner(System.in);
         //Get Domain Name
         System.out.print("\nPlease enter the domain name: ");
@@ -187,55 +218,127 @@ public class PassManager {
         String passwd_file_path = System.getProperty("user.dir");
         passwd_file_path += "/passwd_file";
         Path path = Paths.get(passwd_file_path);
-        byte[] accountInfo = Files.readAllBytes(path);
-        byte[] decrypted = SecurityFunction.decrypt(accountInfo);
+        byte[] data = Files.readAllBytes(path);
 
-        //TODO: if account doesn't exists print USER ACCOUNT DOES NOT EXISTS!\n
-        //TODO: else find account, update password
-        //newData will be data with account info updated
-        byte[] newData = null;
+        //strip hmac
+        byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
+        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac);
 
-        byte[] encrypted = SecurityFunction.encrypt(newData);
+        //perform account change
+        if (accountLookup(domain, username, decrypted) != null) {
+            String dataString = new String(decrypted, "UTF-8");
+            String[] accounts = dataString.split("!");
+            String account = domain + " " + username;
+            String updated = domain + " " + username + " " + newpass;
+            //search through accounts and delete account
+            for (int i = 0; i < accounts.length; i++) {
+                if (accounts[i].contains(account)) {
+                    accounts[i] = updated;
+                    break;
+                }
+            }
+            //rebuild list of accounts and change to byte[]
+            String newAccList = "";
+            for (String acc : accounts) {
+                newAccList += acc + "!";
+            }
+            byte[] bytesData = newAccList.getBytes("UTF-8");
 
-        try (FileOutputStream output = new FileOutputStream("passwd_file")) {
-            output.write(encrypted);
-            output.close();
+            //encrypt new data
+            byte[] encrypted = SecurityFunction.encrypt(bytesData);
+
+            //generate new hmac and append
+            byte[] hmac = SecurityFunction.hmac(encrypted);
+            byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
+
+            //write to file
+            try (FileOutputStream output = new FileOutputStream("passwd_file")) {
+                output.write(hmac_and_encrypted);
+                output.close();
+                System.out.println("USER ACCOUNT UPDATED!\n");
+            }
+        } else {//account not found
+            System.out.println("USER ACCOUNT DOES NOT EXIST!\n");
         }
     }
 
-    private static void getPassword() {
+    /*  This is a feature required by the assignment where it reads in a domain
+    *   from the user and returns all usernames and passwords matching that domain.
+    */
+    private static void getPassword() throws
+    IOException,
+    NoSuchAlgorithmException,
+    NoSuchPaddingException,
+    InvalidKeyException,
+    InvalidAlgorithmParameterException,
+    IllegalBlockSizeException,
+    BadPaddingException,
+    NoSuchProviderException,
+    FileNotFoundException,
+    InvalidKeySpecException {
         Scanner sc = new Scanner(System.in);
-
         System.out.print("\nPlease enter a domain: ");
         String domain = sc.next();
 
-        //TODO: lookup account
-        //TODO: if exists convert username and password to String print using proper format
-        //TODO: else print USER ACCOUNT DOES NOT EXIST!\n
-    }
-
-    private static void setup() throws
-            NoSuchAlgorithmException, NoSuchProviderException, FileNotFoundException, IOException {
-        Scanner sc = new Scanner(System.in);
-        //create passwd_file path
+        //reads in all data from /passwd_file
         String passwd_file_path = System.getProperty("user.dir");
         passwd_file_path += "/passwd_file";
+        Path path = Paths.get(passwd_file_path);
+        byte[] data = Files.readAllBytes(path);
+
+        //strip hmac
+        byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
+        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac);
+
+        //search data for account and print all found based on domain
+        String dataString = new String(decrypted, "UTF-8");
+        String[] accounts = dataString.split("!");
+        String id = domain;
+        for (String account : accounts) {
+            if (account.contains(id)) {
+                String[] accArr = account.split(" ");
+                System.out.print("username " + accArr[1] + " password " + accArr[2] + "\n");
+            }
+        }
+    }
+
+    //This is used upon startup for the first time or if a file is missing to
+    private static void setup() throws
+    NoSuchAlgorithmException,
+    NoSuchProviderException,
+    FileNotFoundException,
+    IOException,
+    InvalidKeyException,
+    InvalidKeySpecException,
+    NoSuchPaddingException,
+    IllegalBlockSizeException,
+    BadPaddingException,
+    InvalidParameterSpecException,
+    InvalidAlgorithmParameterException {
+        Scanner sc = new Scanner(System.in);
+        //create passwd_file path
+        String passwd_file_string = System.getProperty("user.dir");
+        passwd_file_string += "/passwd_file";
 
         //Used for master_passwd path
-        String master_passwd_path = System.getProperty("user.dir");
-        master_passwd_path += "/master_passwd";
+        String master_passwd_string = System.getProperty("user.dir");
+        master_passwd_string += "/master_passwd";
+
+        //initialize file paths
+        Path passwd_file_path = Paths.get(passwd_file_string);
+        Path master_passwd_path = Paths.get(master_passwd_string);
 
         //initialize files
-        File passwd_file = new File(passwd_file_path);
-        File master_passwd_file = new File(master_passwd_path);
+        File master_passwd_file = new File(master_passwd_string);
+        File passwd_file = new File(passwd_file_string);
+
+        //delete old files if they exists
+        Files.deleteIfExists(passwd_file_path);
+        Files.deleteIfExists(master_passwd_path);
 
         //create files
-        try {
-            passwd_file.createNewFile();
-            master_passwd_file.createNewFile();
-        } catch (IOException e) {
-            System.out.println(e);
-        }
+        passwd_file.createNewFile();
+        master_passwd_file.createNewFile();
 
         //get master password
         System.out.print("\nPlease provide a master password: ");
@@ -246,40 +349,51 @@ public class PassManager {
         byte[] salt = SecurityFunction.randomNumberGenerator(256);
         byte[] salted_password = Arrays.concatenate(salt, password);
 
+        //setup master_passwd file
         byte[] hash = SecurityFunction.hash(salted_password);
         byte[] salt_and_hash = Arrays.concatenate(salt, hash);
-
+        //write data to master_passwd file
         try (FileOutputStream output = new FileOutputStream("master_passwd")) {
             output.write(salt_and_hash);
+            output.close();
         }
 
+        //get hash for passwd_file and append to file
+        byte[] passwd_file_data = Files.readAllBytes(passwd_file_path);
+        byte[] encrypted = SecurityFunction.encrypt(passwd_file_data);
+        byte[] hmac = SecurityFunction.hmac(encrypted);
+        byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
+        //write data to passwd_file
+        try (FileOutputStream output = new FileOutputStream("passwd_file")) {
+            output.write(hmac_and_encrypted);
+            output.close();
+        }
     }
 
+    //This is a helper function to help do a password check during startup
     private static boolean passwordCheck(String entry) throws
-            FileNotFoundException, IOException, NoSuchAlgorithmException, NoSuchProviderException {
+    FileNotFoundException,
+    IOException,
+    NoSuchAlgorithmException,
+    NoSuchProviderException {
+        //get contents
+        String master_passwd_path = System.getProperty("user.dir");
+        master_passwd_path += "/master_passwd";
+        Path path = Paths.get(master_passwd_path);
+        byte[] contents = Files.readAllBytes(path);
 
-        byte[] password = entry.getBytes();
-
-        byte[] contents = new byte[320];
-
-        try (FileInputStream input = new FileInputStream("master_passwd")) {
-            //read in all 320 bytes from the master_passwd file
-            for (int i = 0; i < 320; i++) {
-                contents[i] = (byte) input.read();
-            }
-        }
-
+        //get salt and password as bytes for comparison
         byte[] salt = Arrays.copyOf(contents, 256);
+        byte[] password = entry.getBytes();
 
         //concatenate the salt and the password then hash it
         byte[] salted_password = Arrays.concatenate(salt, password);
         byte[] hashed = SecurityFunction.hash(salted_password);
 
         return (Arrays.areEqual(contents, Arrays.concatenate(salt, hashed)));
-
     }
 
-    //This will be useful for making changes to acount/password lookup
+    //This will be used for checking if accounts exist
     private static String accountLookup(String domain, String user, byte[] data) throws UnsupportedEncodingException {
         String dataString = new String(data, "UTF-8");
         String[] accounts = dataString.split("!");
@@ -294,6 +408,7 @@ public class PassManager {
         return null;
     }
 
+    //This is a helper function to verify that both files exist
     private static boolean fileCheck() {
         //Used for passwd_file path
         String passwd_file_path = System.getProperty("user.dir");
@@ -309,12 +424,21 @@ public class PassManager {
         return (passwd_file.exists() && master_passwd.exists());
     }
 
-    private static void startup() throws
-            IOException,
-            NoSuchAlgorithmException,
-            FileNotFoundException,
-            NoSuchProviderException {
-        String master_passwd;
+    //this method is used to authenticate the user and verify the integrity of passwd_file on startup
+    private static boolean startup() throws
+    IOException,
+    NoSuchAlgorithmException,
+    FileNotFoundException,
+    NoSuchProviderException,
+    InvalidKeyException,
+    InvalidKeySpecException,
+    NoSuchPaddingException,
+    IllegalBlockSizeException,
+    BadPaddingException,
+    InvalidParameterSpecException,
+    InvalidAlgorithmParameterException {
+        private String master_passwd;
+        private boolean authenticated = false;
         Scanner sc = new Scanner(System.in);
 
         System.out.println("\nWelcome to your password manager");
@@ -336,10 +460,24 @@ public class PassManager {
                     System.exit(0);
                 }
             }
+            //integrity check
+            String passwd_file_path = System.getProperty("user.dir");
+            passwd_file_path += "/passwd_file";
+            Path path = Paths.get(passwd_file_path);
+            byte[] data = Files.readAllBytes(path);
+
+            byte[] lastHmac = Arrays.copyOf(data, 64);
+            byte[] encrypted = Arrays.copyOfRange(data, 64, data.length);
+            byte[] currentHmac = SecurityFunction.hmac(encrypted);
+
+            if (Arrays.areEqual(lastHmac, currentHmac)) {
+            } else {
+                System.out.println("INTEGRITY CHECK OF PASSWORD FILE FAILED\n");
+            }
         }
     }
 
-    private static int mainMenu() {
+    private static void mainMenu() {
         Scanner sc = new Scanner(System.in);
         System.out.println("\n1 - Check Integrity");
         System.out.println("2 - Register Account");
@@ -357,58 +495,57 @@ public class PassManager {
             }
             option = sc.nextInt();
         } while (!(option >= 1 && option <= 6));
-        return option;
+        switch (option_select) {
+            case 1:
+            checkIntegrity();
+            break;
+            case 2:
+            registerAccount();
+            break;
+            case 3:
+            deleteAccount();
+            break;
+            case 4:
+            changeAccount();
+            break;
+            case 5:
+            getPassword();
+            break;
+            case 6:
+            System.exit(0);
+        }
     }
 
     /**
-     *
-     * @param args
-     * @throws NoSuchAlgorithmException
-     * @throws NoSuchProviderException
-     * @throws IOException
-     * @throws NoSuchPaddingException
-     * @throws java.io.FileNotFoundException
-     * @throws java.security.InvalidKeyException
-     * @throws javax.crypto.IllegalBlockSizeException
-     * @throws javax.crypto.BadPaddingException
-     * @throws java.security.spec.InvalidParameterSpecException
-     * @throws java.security.InvalidAlgorithmParameterException
-     */
+    *
+    * @param args
+    * @throws NoSuchAlgorithmException
+    * @throws NoSuchProviderException
+    * @throws IOException
+    * @throws NoSuchPaddingException
+    * @throws java.io.FileNotFoundException
+    * @throws java.security.InvalidKeyException
+    * @throws javax.crypto.IllegalBlockSizeException
+    * @throws javax.crypto.BadPaddingException
+    * @throws java.security.spec.InvalidParameterSpecException
+    * @throws java.security.InvalidAlgorithmParameterException
+    * @throws java.security.spec.InvalidKeySpecException
+    */
     public static void main(String[] args) throws
-            NoSuchAlgorithmException,
-            NoSuchProviderException,
-            IOException,
-            NoSuchPaddingException,
-            FileNotFoundException,
-            InvalidKeyException,
-            IllegalBlockSizeException,
-            BadPaddingException,
-            InvalidParameterSpecException,
-            InvalidAlgorithmParameterException {
-        int option_select;
-
+    NoSuchAlgorithmException,
+    NoSuchProviderException,
+    IOException,
+    NoSuchPaddingException,
+    FileNotFoundException,
+    InvalidKeyException,
+    IllegalBlockSizeException,
+    BadPaddingException,
+    InvalidParameterSpecException,
+    InvalidAlgorithmParameterException,
+    InvalidKeySpecException {
         startup();
         while (true) {
-            option_select = mainMenu();
-            switch (option_select) {
-                case 1:
-                    checkIntegrity();
-                    break;
-                case 2:
-                    registerAccount();
-                    break;
-                case 3:
-                    deleteAccount();
-                    break;
-                case 4:
-                    changeAccount();
-                    break;
-                case 5:
-                    getPassword();
-                    break;
-                case 6:
-                    System.exit(0);
-            }
+            mainMenu();
         }
     }
 }

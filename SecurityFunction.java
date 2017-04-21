@@ -1,9 +1,4 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-package passwordmanager;
+
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -12,7 +7,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
-import java.security.Key;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
@@ -21,11 +15,10 @@ import java.security.Security;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.InvalidParameterSpecException;
 import java.security.spec.KeySpec;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.Mac;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
@@ -38,7 +31,7 @@ import org.bouncycastle.util.Arrays;
 
 /**
  *
- * @author Kyle Den Hartog, Nicholas Kao, 
+ * @author Kyle Den Hartog, Nicholas Kao, and Doug Ives
  */
 public class SecurityFunction {
 
@@ -62,27 +55,27 @@ public class SecurityFunction {
             FileNotFoundException,
             IOException,
             InvalidParameterSpecException,
-            InvalidAlgorithmParameterException {
-
+            InvalidAlgorithmParameterException,
+            InvalidKeySpecException {
         Security.addProvider(new BouncyCastleProvider());
-        Cipher aes = Cipher.getInstance("AES/CTR/NoPadding");
+        Cipher aes = Cipher.getInstance("AES/CTR/NoPadding", "BC");
 
         //Create IV
         SecureRandom rand = new SecureRandom();
         byte[] iv = new byte[aes.getBlockSize()];
         rand.nextBytes(iv);
         IvParameterSpec ivParam = new IvParameterSpec(iv);
-        
+
         //Create Key
-        Key key = generateKey();
+        SecretKey key = generateKey();
 
         //encrypt
         aes.init(Cipher.ENCRYPT_MODE, key, ivParam);
         byte[] encrypted = aes.doFinal(input);
 
         //combine IV and encrypted and return
-        byte[] data = Arrays.concatenate(iv, encrypted);
-        return data;
+        byte[] iv_and_encrypted = Arrays.concatenate(iv, encrypted);
+        return iv_and_encrypted;
     }
 
     public static byte[] decrypt(byte[] input) throws
@@ -92,26 +85,48 @@ public class SecurityFunction {
             InvalidKeyException,
             InvalidAlgorithmParameterException,
             IllegalBlockSizeException,
-            BadPaddingException {
+            BadPaddingException,
+            NoSuchProviderException,
+            FileNotFoundException,
+            InvalidKeySpecException {
         Security.addProvider(new BouncyCastleProvider());
-        Cipher aes = Cipher.getInstance("AES/CTR/NoPadding");
+        Cipher aes = Cipher.getInstance("AES/CTR/NoPadding", "BC");
 
         //get IV
         byte[] iv = new byte[aes.getBlockSize()];
         iv = Arrays.copyOf(input, iv.length);
         IvParameterSpec ivParam = new IvParameterSpec(iv);
-        
+
         //get Key
-        Key key = generateKey();
-        
+        SecretKey key = generateKey();
+
         //get data to decrypt
-        byte[] encrypted = new byte[input.length - iv.length];
-        encrypted= Arrays.copyOfRange(input, iv.length, input.length);
-        
+        byte[] encrypted = Arrays.copyOfRange(input, iv.length, input.length);
+
         //decrypt
         aes.init(Cipher.DECRYPT_MODE, key, ivParam);
         byte[] decrypted = aes.doFinal(encrypted);
         return decrypted;
+    }
+
+    public static byte[] hmac(byte[] input) throws
+            IOException,
+            FileNotFoundException,
+            NoSuchProviderException,
+            NoSuchAlgorithmException,
+            InvalidKeyException,
+            InvalidKeySpecException {
+        Security.addProvider(new BouncyCastleProvider());
+
+        //generate SecretKey from master_passwd
+        SecretKey key = generateKey();
+
+        //initialize SHA512Hmac using master_passwd key
+        Mac mac = Mac.getInstance("HmacSHA512", "BC");
+        mac.init(key);
+
+        //return hmac
+        return mac.doFinal(input);
     }
 
     public static byte[] randomNumberGenerator(int size) {
@@ -124,10 +139,14 @@ public class SecurityFunction {
 
     }
 
-    private static Key generateKey() throws FileNotFoundException, IOException {
-        try {
+    private static SecretKey generateKey() throws
+            FileNotFoundException,
+            IOException,
+            NoSuchProviderException,
+            InvalidKeySpecException,
+            NoSuchAlgorithmException {
             Security.addProvider(new BouncyCastleProvider());
-            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512");
+            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512", "BC");
 
             //get Salt and Hash for key generation
             //Used for master_passwd path
@@ -138,9 +157,9 @@ public class SecurityFunction {
             byte[] salt = new byte[256];
             //get salt
             System.arraycopy(data, 0, salt, 0, 256);
-            
+
             //get hash
-            byte [] hashArr = new byte[data.length - 256];
+            byte[] hashArr = new byte[data.length - 256];
             System.arraycopy(data, salt.length, hashArr, 0, hashArr.length);
             String hash = String.format("%064x", new java.math.BigInteger(1, hashArr));
 
@@ -148,10 +167,5 @@ public class SecurityFunction {
             SecretKey tmpKey = factory.generateSecret(spec);
             SecretKey key = new SecretKeySpec(tmpKey.getEncoded(), "AES");
             return key;
-
-        } catch (NoSuchAlgorithmException | InvalidKeySpecException ex) {
-            Logger.getLogger(SecurityFunction.class.getName()).log(Level.SEVERE, null, ex);
-            return null;
-        }
     }
 }

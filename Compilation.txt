@@ -1,1 +1,5 @@
-This is the method of compilation file.
+To compile and run the files type:
+./run.sh
+
+Note: it has been given execution permissions already, but if you have issues with the above command you should try:
+chmod +x run.sh

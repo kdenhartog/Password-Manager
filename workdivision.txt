@@ -1,1 +1,5 @@
 This is intended to state how work was divided up between team members.
+
+Doug handled the setup and UI parts and startup function to verify an authenticated user.
+Nick handled the functionality methods to get registerAccount, deleteAccount, changeAccount, and getPassword working.
+Kyle completed the SecurityFunction class and assisted with the integration of its uses.
