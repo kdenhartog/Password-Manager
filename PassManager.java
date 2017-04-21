@@ -425,7 +425,7 @@ public class PassManager {
     }
 
     //this method is used to authenticate the user and verify the integrity of passwd_file on startup
-    private static boolean startup() throws
+    private static void startup() throws
     IOException,
     NoSuchAlgorithmException,
     FileNotFoundException,
@@ -437,8 +437,7 @@ public class PassManager {
     BadPaddingException,
     InvalidParameterSpecException,
     InvalidAlgorithmParameterException {
-        private String master_passwd;
-        private boolean authenticated = false;
+        String master_passwd;
         Scanner sc = new Scanner(System.in);
 
         System.out.println("\nWelcome to your password manager");
@@ -477,7 +476,18 @@ public class PassManager {
         }
     }
 
-    private static void mainMenu() {
+    private static void mainMenu() throws
+    NoSuchAlgorithmException,
+    NoSuchProviderException,
+    IOException,
+    NoSuchPaddingException,
+    FileNotFoundException,
+    InvalidKeyException,
+    IllegalBlockSizeException,
+    BadPaddingException,
+    InvalidParameterSpecException,
+    InvalidAlgorithmParameterException,
+    InvalidKeySpecException {
         Scanner sc = new Scanner(System.in);
         System.out.println("\n1 - Check Integrity");
         System.out.println("2 - Register Account");
@@ -495,7 +505,7 @@ public class PassManager {
             }
             option = sc.nextInt();
         } while (!(option >= 1 && option <= 6));
-        switch (option_select) {
+        switch (option) {
             case 1:
             checkIntegrity();
             break;
