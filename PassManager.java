@@ -17,21 +17,24 @@ import java.util.Scanner;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
 import org.bouncycastle.util.Arrays;
 
 /**
-*
-* @author Kyle Den Hartog, Nicholas Kao, and Doug Ives
-*/
+ *
+ * @author Kyle Den Hartog, Nicholas Kao, and Doug Ives
+ */
 public class PassManager {
 
+    private static SecretKey key;
+
     private static void checkIntegrity() throws
-    IOException,
-    FileNotFoundException,
-    NoSuchProviderException,
-    NoSuchAlgorithmException,
-    InvalidKeyException,
-    InvalidKeySpecException {
+            IOException,
+            FileNotFoundException,
+            NoSuchProviderException,
+            NoSuchAlgorithmException,
+            InvalidKeyException,
+            InvalidKeySpecException {
         //Get data from passwd_file
         String passwd_file_path = System.getProperty("user.dir");
         passwd_file_path += "/passwd_file";
@@ -40,8 +43,7 @@ public class PassManager {
 
         byte[] lastHmac = Arrays.copyOf(data, 64);
         byte[] encrypted = Arrays.copyOfRange(data, 64, data.length);
-        byte[] currentHmac = SecurityFunction.hmac(encrypted);
-
+        byte[] currentHmac = SecurityFunction.hmac(encrypted, key);
 
         if (Arrays.areEqual(lastHmac, currentHmac)) {
             System.out.print("PASSED!\n");
@@ -51,17 +53,17 @@ public class PassManager {
     }
 
     private static void registerAccount() throws
-    NoSuchAlgorithmException,
-    NoSuchPaddingException,
-    NoSuchProviderException,
-    FileNotFoundException,
-    IOException,
-    InvalidKeyException,
-    IllegalBlockSizeException,
-    BadPaddingException,
-    InvalidParameterSpecException,
-    InvalidAlgorithmParameterException,
-    InvalidKeySpecException {
+            NoSuchAlgorithmException,
+            NoSuchPaddingException,
+            NoSuchProviderException,
+            FileNotFoundException,
+            IOException,
+            InvalidKeyException,
+            IllegalBlockSizeException,
+            BadPaddingException,
+            InvalidParameterSpecException,
+            InvalidAlgorithmParameterException,
+            InvalidKeySpecException {
         Scanner sc = new Scanner(System.in);
         //Get Domain Name
         System.out.print("\nPlease enter the domain name: ");
@@ -83,7 +85,7 @@ public class PassManager {
 
         //strip hmac
         byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
-        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac);
+        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac, key);
 
         //Lookup account to see if it already exists if not write it to file
         if (accountLookup(domain, username, decrypted) == null) {
@@ -95,10 +97,10 @@ public class PassManager {
             byte[] newData = Arrays.concatenate(decrypted, dataBytes);
 
             //reencrypt data
-            byte[] encrypted = SecurityFunction.encrypt(newData);
+            byte[] encrypted = SecurityFunction.encrypt(newData, key);
 
             //generate hmac
-            byte[] hmac = SecurityFunction.hmac(encrypted);
+            byte[] hmac = SecurityFunction.hmac(encrypted, key);
             byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
 
             //write to file
@@ -113,17 +115,17 @@ public class PassManager {
     }
 
     private static void deleteAccount() throws
-    IOException,
-    NoSuchAlgorithmException,
-    NoSuchProviderException,
-    NoSuchPaddingException,
-    InvalidKeyException,
-    IllegalBlockSizeException,
-    BadPaddingException,
-    InvalidParameterSpecException,
-    FileNotFoundException,
-    InvalidAlgorithmParameterException,
-    InvalidKeySpecException {
+            IOException,
+            NoSuchAlgorithmException,
+            NoSuchProviderException,
+            NoSuchPaddingException,
+            InvalidKeyException,
+            IllegalBlockSizeException,
+            BadPaddingException,
+            InvalidParameterSpecException,
+            FileNotFoundException,
+            InvalidAlgorithmParameterException,
+            InvalidKeySpecException {
         Scanner sc = new Scanner(System.in);
         //Get Domain Name
         System.out.print("\nPlease enter the domain name: ");
@@ -143,7 +145,7 @@ public class PassManager {
 
         //strip hmac
         byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
-        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac);
+        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac, key);
 
         //check if account exists
         if (accountLookup(domain, username, decrypted) != null) {
@@ -170,10 +172,10 @@ public class PassManager {
             byte[] bytesData = newAccList.getBytes("UTF-8");
 
             //encrypt data
-            byte[] encrypted = SecurityFunction.encrypt(bytesData);
+            byte[] encrypted = SecurityFunction.encrypt(bytesData, key);
 
             //generate hmac and append data
-            byte[] hmac = SecurityFunction.hmac(encrypted);
+            byte[] hmac = SecurityFunction.hmac(encrypted, key);
             byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
 
             //write to file
@@ -189,19 +191,19 @@ public class PassManager {
 
     /*  This is a function to change an accounts password given a domain name,
     *   a username, the old password, and the new password.
-    */
+     */
     private static void changeAccount() throws
-    IOException,
-    NoSuchAlgorithmException,
-    NoSuchProviderException,
-    NoSuchPaddingException,
-    InvalidKeyException,
-    IllegalBlockSizeException,
-    BadPaddingException,
-    InvalidParameterSpecException,
-    FileNotFoundException,
-    InvalidAlgorithmParameterException,
-    InvalidKeySpecException {
+            IOException,
+            NoSuchAlgorithmException,
+            NoSuchProviderException,
+            NoSuchPaddingException,
+            InvalidKeyException,
+            IllegalBlockSizeException,
+            BadPaddingException,
+            InvalidParameterSpecException,
+            FileNotFoundException,
+            InvalidAlgorithmParameterException,
+            InvalidKeySpecException {
         Scanner sc = new Scanner(System.in);
         //Get Domain Name
         System.out.print("\nPlease enter the domain name: ");
@@ -222,7 +224,7 @@ public class PassManager {
 
         //strip hmac
         byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
-        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac);
+        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac, key);
 
         //perform account change
         if (accountLookup(domain, username, decrypted) != null) {
@@ -245,10 +247,10 @@ public class PassManager {
             byte[] bytesData = newAccList.getBytes("UTF-8");
 
             //encrypt new data
-            byte[] encrypted = SecurityFunction.encrypt(bytesData);
+            byte[] encrypted = SecurityFunction.encrypt(bytesData, key);
 
             //generate new hmac and append
-            byte[] hmac = SecurityFunction.hmac(encrypted);
+            byte[] hmac = SecurityFunction.hmac(encrypted, key);
             byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
 
             //write to file
@@ -264,18 +266,18 @@ public class PassManager {
 
     /*  This is a feature required by the assignment where it reads in a domain
     *   from the user and returns all usernames and passwords matching that domain.
-    */
+     */
     private static void getPassword() throws
-    IOException,
-    NoSuchAlgorithmException,
-    NoSuchPaddingException,
-    InvalidKeyException,
-    InvalidAlgorithmParameterException,
-    IllegalBlockSizeException,
-    BadPaddingException,
-    NoSuchProviderException,
-    FileNotFoundException,
-    InvalidKeySpecException {
+            IOException,
+            NoSuchAlgorithmException,
+            NoSuchPaddingException,
+            InvalidKeyException,
+            InvalidAlgorithmParameterException,
+            IllegalBlockSizeException,
+            BadPaddingException,
+            NoSuchProviderException,
+            FileNotFoundException,
+            InvalidKeySpecException {
         Scanner sc = new Scanner(System.in);
         System.out.print("\nPlease enter a domain: ");
         String domain = sc.next();
@@ -288,7 +290,7 @@ public class PassManager {
 
         //strip hmac
         byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
-        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac);
+        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac, key);
 
         //search data for account and print all found based on domain
         String dataString = new String(decrypted, "UTF-8");
@@ -304,17 +306,17 @@ public class PassManager {
 
     //This is used upon startup for the first time or if a file is missing to
     private static void setup() throws
-    NoSuchAlgorithmException,
-    NoSuchProviderException,
-    FileNotFoundException,
-    IOException,
-    InvalidKeyException,
-    InvalidKeySpecException,
-    NoSuchPaddingException,
-    IllegalBlockSizeException,
-    BadPaddingException,
-    InvalidParameterSpecException,
-    InvalidAlgorithmParameterException {
+            NoSuchAlgorithmException,
+            NoSuchProviderException,
+            FileNotFoundException,
+            IOException,
+            InvalidKeyException,
+            InvalidKeySpecException,
+            NoSuchPaddingException,
+            IllegalBlockSizeException,
+            BadPaddingException,
+            InvalidParameterSpecException,
+            InvalidAlgorithmParameterException {
         Scanner sc = new Scanner(System.in);
         //create passwd_file path
         String passwd_file_string = System.getProperty("user.dir");
@@ -358,10 +360,13 @@ public class PassManager {
             output.close();
         }
 
+        //generate key kept in memory during the use of the program
+        key = SecurityFunction.generateKey(master_passwd);
+
         //get hash for passwd_file and append to file
         byte[] passwd_file_data = Files.readAllBytes(passwd_file_path);
-        byte[] encrypted = SecurityFunction.encrypt(passwd_file_data);
-        byte[] hmac = SecurityFunction.hmac(encrypted);
+        byte[] encrypted = SecurityFunction.encrypt(passwd_file_data, key);
+        byte[] hmac = SecurityFunction.hmac(encrypted, key);
         byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
         //write data to passwd_file
         try (FileOutputStream output = new FileOutputStream("passwd_file")) {
@@ -372,10 +377,10 @@ public class PassManager {
 
     //This is a helper function to help do a password check during startup
     private static boolean passwordCheck(String entry) throws
-    FileNotFoundException,
-    IOException,
-    NoSuchAlgorithmException,
-    NoSuchProviderException {
+            FileNotFoundException,
+            IOException,
+            NoSuchAlgorithmException,
+            NoSuchProviderException {
         //get contents
         String master_passwd_path = System.getProperty("user.dir");
         master_passwd_path += "/master_passwd";
@@ -426,17 +431,17 @@ public class PassManager {
 
     //this method is used to authenticate the user and verify the integrity of passwd_file on startup
     private static void startup() throws
-    IOException,
-    NoSuchAlgorithmException,
-    FileNotFoundException,
-    NoSuchProviderException,
-    InvalidKeyException,
-    InvalidKeySpecException,
-    NoSuchPaddingException,
-    IllegalBlockSizeException,
-    BadPaddingException,
-    InvalidParameterSpecException,
-    InvalidAlgorithmParameterException {
+            IOException,
+            NoSuchAlgorithmException,
+            FileNotFoundException,
+            NoSuchProviderException,
+            InvalidKeyException,
+            InvalidKeySpecException,
+            NoSuchPaddingException,
+            IllegalBlockSizeException,
+            BadPaddingException,
+            InvalidParameterSpecException,
+            InvalidAlgorithmParameterException {
         String master_passwd;
         Scanner sc = new Scanner(System.in);
 
@@ -459,6 +464,9 @@ public class PassManager {
                     System.exit(0);
                 }
             }
+            //generate key kept in memory during the use of the program
+            key = SecurityFunction.generateKey(master_passwd);
+
             //integrity check
             String passwd_file_path = System.getProperty("user.dir");
             passwd_file_path += "/passwd_file";
@@ -467,7 +475,7 @@ public class PassManager {
 
             byte[] lastHmac = Arrays.copyOf(data, 64);
             byte[] encrypted = Arrays.copyOfRange(data, 64, data.length);
-            byte[] currentHmac = SecurityFunction.hmac(encrypted);
+            byte[] currentHmac = SecurityFunction.hmac(encrypted, key);
 
             if (Arrays.areEqual(lastHmac, currentHmac)) {
             } else {
@@ -476,18 +484,7 @@ public class PassManager {
         }
     }
 
-    private static void mainMenu() throws
-    NoSuchAlgorithmException,
-    NoSuchProviderException,
-    IOException,
-    NoSuchPaddingException,
-    FileNotFoundException,
-    InvalidKeyException,
-    IllegalBlockSizeException,
-    BadPaddingException,
-    InvalidParameterSpecException,
-    InvalidAlgorithmParameterException,
-    InvalidKeySpecException {
+    private static int mainMenu() {
         Scanner sc = new Scanner(System.in);
         System.out.println("\n1 - Check Integrity");
         System.out.println("2 - Register Account");
@@ -505,57 +502,60 @@ public class PassManager {
             }
             option = sc.nextInt();
         } while (!(option >= 1 && option <= 6));
-        switch (option) {
-            case 1:
-            checkIntegrity();
-            break;
-            case 2:
-            registerAccount();
-            break;
-            case 3:
-            deleteAccount();
-            break;
-            case 4:
-            changeAccount();
-            break;
-            case 5:
-            getPassword();
-            break;
-            case 6:
-            System.exit(0);
-        }
+        return option;
     }
 
     /**
-    *
-    * @param args
-    * @throws NoSuchAlgorithmException
-    * @throws NoSuchProviderException
-    * @throws IOException
-    * @throws NoSuchPaddingException
-    * @throws java.io.FileNotFoundException
-    * @throws java.security.InvalidKeyException
-    * @throws javax.crypto.IllegalBlockSizeException
-    * @throws javax.crypto.BadPaddingException
-    * @throws java.security.spec.InvalidParameterSpecException
-    * @throws java.security.InvalidAlgorithmParameterException
-    * @throws java.security.spec.InvalidKeySpecException
-    */
+     *
+     * @param args
+     * @throws NoSuchAlgorithmException
+     * @throws NoSuchProviderException
+     * @throws IOException
+     * @throws NoSuchPaddingException
+     * @throws java.io.FileNotFoundException
+     * @throws java.security.InvalidKeyException
+     * @throws javax.crypto.IllegalBlockSizeException
+     * @throws javax.crypto.BadPaddingException
+     * @throws java.security.spec.InvalidParameterSpecException
+     * @throws java.security.InvalidAlgorithmParameterException
+     * @throws java.security.spec.InvalidKeySpecException
+     */
     public static void main(String[] args) throws
-    NoSuchAlgorithmException,
-    NoSuchProviderException,
-    IOException,
-    NoSuchPaddingException,
-    FileNotFoundException,
-    InvalidKeyException,
-    IllegalBlockSizeException,
-    BadPaddingException,
-    InvalidParameterSpecException,
-    InvalidAlgorithmParameterException,
-    InvalidKeySpecException {
+            NoSuchAlgorithmException,
+            NoSuchProviderException,
+            IOException,
+            NoSuchPaddingException,
+            FileNotFoundException,
+            InvalidKeyException,
+            IllegalBlockSizeException,
+            BadPaddingException,
+            InvalidParameterSpecException,
+            InvalidAlgorithmParameterException,
+            InvalidKeySpecException {
+        int option_select;
+
         startup();
         while (true) {
-            mainMenu();
+            option_select = mainMenu();
+            switch (option_select) {
+                case 1:
+                    checkIntegrity();
+                    break;
+                case 2:
+                    registerAccount();
+                    break;
+                case 3:
+                    deleteAccount();
+                    break;
+                case 4:
+                    changeAccount();
+                    break;
+                case 5:
+                    getPassword();
+                    break;
+                case 6:
+                    System.exit(0);
+            }
         }
     }
 }

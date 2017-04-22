@@ -1,5 +1,3 @@
-
-
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -45,7 +43,7 @@ public class SecurityFunction {
     }
 
     //This uses AES-128/CTR/with Padding
-    public static byte[] encrypt(byte[] input) throws
+    public static byte[] encrypt(byte[] input, SecretKey key) throws
             NoSuchAlgorithmException,
             NoSuchProviderException,
             NoSuchPaddingException,
@@ -59,15 +57,11 @@ public class SecurityFunction {
             InvalidKeySpecException {
         Security.addProvider(new BouncyCastleProvider());
         Cipher aes = Cipher.getInstance("AES/CTR/NoPadding", "BC");
-
         //Create IV
         SecureRandom rand = new SecureRandom();
         byte[] iv = new byte[aes.getBlockSize()];
         rand.nextBytes(iv);
         IvParameterSpec ivParam = new IvParameterSpec(iv);
-
-        //Create Key
-        SecretKey key = generateKey();
 
         //encrypt
         aes.init(Cipher.ENCRYPT_MODE, key, ivParam);
@@ -78,7 +72,7 @@ public class SecurityFunction {
         return iv_and_encrypted;
     }
 
-    public static byte[] decrypt(byte[] input) throws
+    public static byte[] decrypt(byte[] input, SecretKey key) throws
             NoSuchAlgorithmException,
             NoSuchPaddingException,
             IOException,
@@ -97,9 +91,6 @@ public class SecurityFunction {
         iv = Arrays.copyOf(input, iv.length);
         IvParameterSpec ivParam = new IvParameterSpec(iv);
 
-        //get Key
-        SecretKey key = generateKey();
-
         //get data to decrypt
         byte[] encrypted = Arrays.copyOfRange(input, iv.length, input.length);
 
@@ -109,7 +100,7 @@ public class SecurityFunction {
         return decrypted;
     }
 
-    public static byte[] hmac(byte[] input) throws
+    public static byte[] hmac(byte[] input, SecretKey key) throws
             IOException,
             FileNotFoundException,
             NoSuchProviderException,
@@ -117,9 +108,6 @@ public class SecurityFunction {
             InvalidKeyException,
             InvalidKeySpecException {
         Security.addProvider(new BouncyCastleProvider());
-
-        //generate SecretKey from master_passwd
-        SecretKey key = generateKey();
 
         //initialize SHA512Hmac using master_passwd key
         Mac mac = Mac.getInstance("HmacSHA512", "BC");
@@ -129,7 +117,7 @@ public class SecurityFunction {
         return mac.doFinal(input);
     }
 
-    public static byte[] randomNumberGenerator(int size) {
+    public static byte[] randomNumberGenerator(int size) throws NoSuchAlgorithmException, NoSuchProviderException {
         Security.addProvider(new BouncyCastleProvider());
 
         SecureRandom rand = new SecureRandom();
@@ -139,14 +127,14 @@ public class SecurityFunction {
 
     }
 
-    private static SecretKey generateKey() throws
+    public static SecretKey generateKey(String password) throws
             FileNotFoundException,
             IOException,
             NoSuchProviderException,
             InvalidKeySpecException,
             NoSuchAlgorithmException {
             Security.addProvider(new BouncyCastleProvider());
-            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512", "BC");
+            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256", "BC");
 
             //get Salt and Hash for key generation
             //Used for master_passwd path
@@ -158,14 +146,9 @@ public class SecurityFunction {
             //get salt
             System.arraycopy(data, 0, salt, 0, 256);
 
-            //get hash
-            byte[] hashArr = new byte[data.length - 256];
-            System.arraycopy(data, salt.length, hashArr, 0, hashArr.length);
-            String hash = String.format("%064x", new java.math.BigInteger(1, hashArr));
-
-            KeySpec spec = new PBEKeySpec(hash.toCharArray(), salt, 65536, 128);
+            KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 65536, 128);
             SecretKey tmpKey = factory.generateSecret(spec);
             SecretKey key = new SecretKeySpec(tmpKey.getEncoded(), "AES");
-            return key;
+            return tmpKey;
     }
 }
