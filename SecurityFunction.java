@@ -124,10 +124,9 @@ public class SecurityFunction {
         byte[] data = new byte[size];
         rand.nextBytes(data);
         return data;
-
     }
 
-    public static SecretKey generateKey(String password) throws
+    public static SecretKey generateKey(String password, byte[] salt) throws
             FileNotFoundException,
             IOException,
             NoSuchProviderException,
@@ -136,19 +135,10 @@ public class SecurityFunction {
             Security.addProvider(new BouncyCastleProvider());
             SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256", "BC");
 
-            //get Salt and Hash for key generation
-            //Used for master_passwd path
-            String master_passwd_path = System.getProperty("user.dir");
-            master_passwd_path += "/master_passwd";
-            Path path = Paths.get(master_passwd_path);
-            byte[] data = Files.readAllBytes(path);
-            byte[] salt = new byte[256];
-            //get salt
-            System.arraycopy(data, 0, salt, 0, 256);
-
+            //generate key
             KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 65536, 128);
             SecretKey tmpKey = factory.generateSecret(spec);
             SecretKey key = new SecretKeySpec(tmpKey.getEncoded(), "AES");
-            return tmpKey;
+            return key;
     }
 }

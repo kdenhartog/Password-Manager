@@ -26,7 +26,10 @@ import org.bouncycastle.util.Arrays;
  */
 public class PassManager {
 
-    private static SecretKey key;
+    private static SecretKey encKey;
+    private static SecretKey macKey;
+    private static byte[] macSalt;
+    private static byte[] encSalt;
 
     private static void checkIntegrity() throws
             IOException,
@@ -41,9 +44,9 @@ public class PassManager {
         Path path = Paths.get(passwd_file_path);
         byte[] data = Files.readAllBytes(path);
 
-        byte[] lastHmac = Arrays.copyOf(data, 64);
-        byte[] encrypted = Arrays.copyOfRange(data, 64, data.length);
-        byte[] currentHmac = SecurityFunction.hmac(encrypted, key);
+        byte[] lastHmac = Arrays.copyOfRange(data, 256, 320);
+        byte[] encrypted = Arrays.copyOfRange(data, 320, data.length);
+        byte[] currentHmac = SecurityFunction.hmac(encrypted, macKey);
 
         if (Arrays.areEqual(lastHmac, currentHmac)) {
             System.out.print("PASSED!\n");
@@ -83,9 +86,9 @@ public class PassManager {
         Path path = Paths.get(passwd_file_path);
         byte[] data = Files.readAllBytes(path);
 
-        //strip hmac
-        byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
-        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac, key);
+        //strip hmac and salt
+        byte[] encrypted_data = Arrays.copyOfRange(data, 320, data.length);
+        byte[] decrypted = SecurityFunction.decrypt(encrypted_data, encKey);
 
         //Lookup account to see if it already exists if not write it to file
         if (accountLookup(domain, username, decrypted) == null) {
@@ -97,15 +100,15 @@ public class PassManager {
             byte[] newData = Arrays.concatenate(decrypted, dataBytes);
 
             //reencrypt data
-            byte[] encrypted = SecurityFunction.encrypt(newData, key);
+            byte[] encrypted = SecurityFunction.encrypt(newData, encKey);
 
             //generate hmac
-            byte[] hmac = SecurityFunction.hmac(encrypted, key);
-            byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
+            byte[] hmac = SecurityFunction.hmac(encrypted, macKey);
+            byte[] salt_hmac_and_encrypted = Arrays.concatenate(macSalt, hmac, encrypted);
 
             //write to file
             try (FileOutputStream output = new FileOutputStream("passwd_file")) {
-                output.write(hmac_and_encrypted);
+                output.write(salt_hmac_and_encrypted);
                 output.close();
                 System.out.println("USER ACCOUNT REGISTERED!\n");
             }
@@ -143,9 +146,9 @@ public class PassManager {
         Path path = Paths.get(passwd_file_path);
         byte[] data = Files.readAllBytes(path);
 
-        //strip hmac
-        byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
-        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac, key);
+        //strip hmac and salt
+        byte[] encrypted_data = Arrays.copyOfRange(data, 320, data.length);
+        byte[] decrypted = SecurityFunction.decrypt(encrypted_data, encKey);
 
         //check if account exists
         if (accountLookup(domain, username, decrypted) != null) {
@@ -172,15 +175,15 @@ public class PassManager {
             byte[] bytesData = newAccList.getBytes("UTF-8");
 
             //encrypt data
-            byte[] encrypted = SecurityFunction.encrypt(bytesData, key);
+            byte[] encrypted = SecurityFunction.encrypt(bytesData, encKey);
 
-            //generate hmac and append data
-            byte[] hmac = SecurityFunction.hmac(encrypted, key);
-            byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
+            //generate salt, hmac, and append data
+            byte[] hmac = SecurityFunction.hmac(encrypted, macKey);
+            byte[] salt_hmac_and_encrypted = Arrays.concatenate(macSalt, hmac, encrypted);
 
             //write to file
             try (FileOutputStream output = new FileOutputStream("passwd_file")) {
-                output.write(hmac_and_encrypted);
+                output.write(salt_hmac_and_encrypted);
                 output.close();
                 System.out.println("USER ACCOUNT REMOVED!\n");
             }
@@ -190,7 +193,7 @@ public class PassManager {
     }
 
     /*  This is a function to change an accounts password given a domain name,
-    *   a username, the old password, and the new password.
+     *  a username, the old password, and the new password.
      */
     private static void changeAccount() throws
             IOException,
@@ -223,8 +226,8 @@ public class PassManager {
         byte[] data = Files.readAllBytes(path);
 
         //strip hmac
-        byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
-        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac, key);
+        byte[] encrypted_data = Arrays.copyOfRange(data, 320, data.length);
+        byte[] decrypted = SecurityFunction.decrypt(encrypted_data, encKey);
 
         //perform account change
         if (accountLookup(domain, username, decrypted) != null) {
@@ -247,15 +250,15 @@ public class PassManager {
             byte[] bytesData = newAccList.getBytes("UTF-8");
 
             //encrypt new data
-            byte[] encrypted = SecurityFunction.encrypt(bytesData, key);
+            byte[] encrypted = SecurityFunction.encrypt(bytesData, encKey);
 
             //generate new hmac and append
-            byte[] hmac = SecurityFunction.hmac(encrypted, key);
-            byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
+            byte[] hmac = SecurityFunction.hmac(encrypted, macKey);
+            byte[] salt_hmac_and_encrypted = Arrays.concatenate(macSalt, hmac, encrypted);
 
             //write to file
             try (FileOutputStream output = new FileOutputStream("passwd_file")) {
-                output.write(hmac_and_encrypted);
+                output.write(salt_hmac_and_encrypted);
                 output.close();
                 System.out.println("USER ACCOUNT UPDATED!\n");
             }
@@ -289,8 +292,8 @@ public class PassManager {
         byte[] data = Files.readAllBytes(path);
 
         //strip hmac
-        byte[] data_no_hmac = Arrays.copyOfRange(data, 64, data.length);
-        byte[] decrypted = SecurityFunction.decrypt(data_no_hmac, key);
+        byte[] encrypted_data = Arrays.copyOfRange(data, 320, data.length);
+        byte[] decrypted = SecurityFunction.decrypt(encrypted_data, encKey);
 
         //search data for account and print all found based on domain
         String dataString = new String(decrypted, "UTF-8");
@@ -347,13 +350,15 @@ public class PassManager {
         String master_passwd = sc.next();
         byte[] password = master_passwd.getBytes();
 
-        //get salt and combine with master password
-        byte[] salt = SecurityFunction.randomNumberGenerator(256);
-        byte[] salted_password = Arrays.concatenate(salt, password);
+        //get salts and combine with master password
+        encSalt = SecurityFunction.randomNumberGenerator(256);
+        macSalt = SecurityFunction.randomNumberGenerator(256);
+        byte[] salted_password = Arrays.concatenate(encSalt, password);
 
         //setup master_passwd file
         byte[] hash = SecurityFunction.hash(salted_password);
-        byte[] salt_and_hash = Arrays.concatenate(salt, hash);
+        byte[] salt_and_hash = Arrays.concatenate(encSalt, hash);
+
         //write data to master_passwd file
         try (FileOutputStream output = new FileOutputStream("master_passwd")) {
             output.write(salt_and_hash);
@@ -361,17 +366,88 @@ public class PassManager {
         }
 
         //generate key kept in memory during the use of the program
-        key = SecurityFunction.generateKey(master_passwd);
+        encKey = SecurityFunction.generateKey(master_passwd, encSalt);
+        macKey = SecurityFunction.generateKey(master_passwd, macSalt);
 
         //get hash for passwd_file and append to file
         byte[] passwd_file_data = Files.readAllBytes(passwd_file_path);
-        byte[] encrypted = SecurityFunction.encrypt(passwd_file_data, key);
-        byte[] hmac = SecurityFunction.hmac(encrypted, key);
-        byte[] hmac_and_encrypted = Arrays.concatenate(hmac, encrypted);
+        byte[] encrypted = SecurityFunction.encrypt(passwd_file_data, encKey);
+        byte[] hmac = SecurityFunction.hmac(encrypted, macKey);
+        byte[] salt_hmac_and_encrypted = Arrays.concatenate(macSalt, hmac, encrypted);
+
         //write data to passwd_file
         try (FileOutputStream output = new FileOutputStream("passwd_file")) {
-            output.write(hmac_and_encrypted);
+            output.write(salt_hmac_and_encrypted);
             output.close();
+        }
+    }
+
+    //this method is used to authenticate the user and verify the integrity of passwd_file on startup
+    private static boolean startup() throws
+            IOException,
+            NoSuchAlgorithmException,
+            FileNotFoundException,
+            NoSuchProviderException,
+            InvalidKeyException,
+            InvalidKeySpecException,
+            NoSuchPaddingException,
+            IllegalBlockSizeException,
+            BadPaddingException,
+            InvalidParameterSpecException,
+            InvalidAlgorithmParameterException {
+        String master_passwd;
+        Scanner sc = new Scanner(System.in);
+
+        System.out.println("\nWelcome to your password manager");
+        if (!fileCheck()) {
+            setup();
+            return true;
+        } else {
+            System.out.print("\nPlease enter your master password: ");
+            master_passwd = sc.next();
+
+            //verifies password are correct or exits after 5 attempts
+            int counter = 0;
+            while (!passwordCheck(master_passwd)) {
+                System.out.println("WRONG MASTER PASSWORD\n");
+                System.out.print("Please re-enter your master password: ");
+                master_passwd = sc.next();
+                counter++;
+                if (counter == 5) {
+                    System.out.println("Password attempts exceeded. Exiting...");
+                    return false;
+                }
+            }
+
+            //get file data
+            String passwd_file_path = System.getProperty("user.dir");
+            passwd_file_path += "/passwd_file";
+            Path pPath = Paths.get(passwd_file_path);
+            byte[] passwd_file_data = Files.readAllBytes(pPath);
+
+            String master_passwd_path = System.getProperty("user.dir");
+            master_passwd_path += "/master_passwd";
+            Path mPath = Paths.get(master_passwd_path);
+            byte[] master_passwd_data = Files.readAllBytes(mPath);
+
+            //get salts for both Keys
+            macSalt = Arrays.copyOf(passwd_file_data, 256);
+            encSalt = Arrays.copyOf(master_passwd_data, 256);
+
+            //generate key kept in memory during the use of the program
+            encKey = SecurityFunction.generateKey(master_passwd, encSalt);
+            macKey = SecurityFunction.generateKey(master_passwd, macSalt);
+
+            //integrity check
+            byte[] lastHmac = Arrays.copyOfRange(passwd_file_data, 256, 320);
+            byte[] encrypted = Arrays.copyOfRange(passwd_file_data, 320, passwd_file_data.length);
+            byte[] currentHmac = SecurityFunction.hmac(encrypted, macKey);
+
+            if (Arrays.areEqual(lastHmac, currentHmac)) {
+            } else {
+                System.out.println("INTEGRITY CHECK OF PASSWORD FILE FAILED\n");
+            }
+            return true;
         }
     }
 
@@ -429,62 +505,18 @@ public class PassManager {
         return (passwd_file.exists() && master_passwd.exists());
     }
 
-    //this method is used to authenticate the user and verify the integrity of passwd_file on startup
-    private static void startup() throws
-            IOException,
+    private static void mainMenu() throws
             NoSuchAlgorithmException,
-            FileNotFoundException,
             NoSuchProviderException,
-            InvalidKeyException,
-            InvalidKeySpecException,
+            IOException,
             NoSuchPaddingException,
+            FileNotFoundException,
+            InvalidKeyException,
             IllegalBlockSizeException,
             BadPaddingException,
             InvalidParameterSpecException,
-            InvalidAlgorithmParameterException {
-        String master_passwd;
-        Scanner sc = new Scanner(System.in);
-
-        System.out.println("\nWelcome to your password manager");
-        if (!fileCheck()) {
-            setup();
-        } else {
-            System.out.print("\nPlease enter your master password: ");
-            master_passwd = sc.next();
-
-            //verifies password are correct or exits after 5 attempts
-            int counter = 0;
-            while (!passwordCheck(master_passwd)) {
-                System.out.println("WRONG MASTER PASSWORD\n");
-                System.out.print("Please re-enter your master password: ");
-                master_passwd = sc.next();
-                counter++;
-                if (counter == 5) {
-                    System.out.println("Password attempts exceeded. Exiting...");
-                    System.exit(0);
-                }
-            }
-            //generate key kept in memory during the use of the program
-            key = SecurityFunction.generateKey(master_passwd);
-
-            //integrity check
-            String passwd_file_path = System.getProperty("user.dir");
-            passwd_file_path += "/passwd_file";
-            Path path = Paths.get(passwd_file_path);
-            byte[] data = Files.readAllBytes(path);
-
-            byte[] lastHmac = Arrays.copyOf(data, 64);
-            byte[] encrypted = Arrays.copyOfRange(data, 64, data.length);
-            byte[] currentHmac = SecurityFunction.hmac(encrypted, key);
-
-            if (Arrays.areEqual(lastHmac, currentHmac)) {
-            } else {
-                System.out.println("INTEGRITY CHECK OF PASSWORD FILE FAILED\n");
-            }
-        }
-    }
-
-    private static int mainMenu() {
+            InvalidAlgorithmParameterException,
+            InvalidKeySpecException {
         Scanner sc = new Scanner(System.in);
         System.out.println("\n1 - Check Integrity");
         System.out.println("2 - Register Account");
@@ -494,6 +526,7 @@ public class PassManager {
         System.out.println("6 - Exit");
         int option = 0;
 
+        //option input sanitization
         do {
             System.out.print("Please enter an integer between 1 and 6 corresponding with the option you would like to select: ");
             while (!sc.hasNextInt()) {
@@ -502,7 +535,27 @@ public class PassManager {
             }
             option = sc.nextInt();
         } while (!(option >= 1 && option <= 6));
-        return option;
+
+        //run option logic
+        switch (option) {
+            case 1:
+                checkIntegrity();
+                break;
+            case 2:
+                registerAccount();
+                break;
+            case 3:
+                deleteAccount();
+                break;
+            case 4:
+                changeAccount();
+                break;
+            case 5:
+                getPassword();
+                break;
+            case 6:
+                System.exit(0);
+            }
     }
 
     /**
@@ -532,29 +585,9 @@ public class PassManager {
             InvalidParameterSpecException,
             InvalidAlgorithmParameterException,
             InvalidKeySpecException {
-        int option_select;
-
-        startup();
-        while (true) {
-            option_select = mainMenu();
-            switch (option_select) {
-                case 1:
-                    checkIntegrity();
-                    break;
-                case 2:
-                    registerAccount();
-                    break;
-                case 3:
-                    deleteAccount();
-                    break;
-                case 4:
-                    changeAccount();
-                    break;
-                case 5:
-                    getPassword();
-                    break;
-                case 6:
-                    System.exit(0);
+        if(startup()){
+            while (true) {
+                mainMenu();
             }
         }
     }
